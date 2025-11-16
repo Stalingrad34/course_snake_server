@@ -9,47 +9,11 @@ class Vector2 {
 const SPAWN_POINTS: Vector2[] = [{x:10, z:10}, {x:-10, z:10}, {x:10, z:-10}, {x:-10, z:-10}]
 
 export class Player extends Schema {
-    @type("uint16")
-    weapon = 0;
-    
-    @type("uint16")
-    loss = 0;
-
-    @type("uint16")
-    health = 0;
-
-    @type("uint16")
-    currentHealth = 0;
-
-    @type("number")
-    speed = 0;
-    
-    @type("number")
-    pX = 0;
-
-    @type("number")
-    pY = 0;
-
-    @type("number")
-    pZ = 0;
-
-    @type("number")
-    vX = 0;
-
-    @type("number")
-    vY = 0;
-
-    @type("number")
-    vZ = 0;
-
-    @type("number")
-    rX = 0;
-
-    @type("number")
-    rY = 0;
-
-    @type("boolean")
-    cr = false;
+    @type("number") speed = 0;
+    @type("uint16") p = 0;
+    @type("number") pX = 0;
+    @type("number") pZ = 0;
+    @type("number") rY = 0;
 }
 
 export class State extends Schema {
@@ -61,9 +25,7 @@ export class State extends Schema {
     createPlayer(sessionId: string, data: any) {
         const player = new Player();
         player.speed = data.speed;
-        player.health = data.health;
-        player.currentHealth = data.health;
-        player.weapon = data.weapon;
+        player.p = data.parts;
 
         const spawnPosition = SPAWN_POINTS[this.players.size]
         player.pX = spawnPosition.x;
@@ -79,19 +41,7 @@ export class State extends Schema {
     movePlayer (sessionId: string, data: any) {
         const player = this.players.get(sessionId);
         player.pX = data.pX;
-        player.pY = data.pY;
         player.pZ = data.pZ;
-        player.vX = data.vX;
-        player.vY = data.vY;
-        player.vZ = data.vZ;
-        player.rX = data.rX;
-        player.rY = data.rY;
-        player.cr = data.cr;
-    }
-
-    changeWeaponPlayer (sessionId: string, data: any) {
-        const player = this.players.get(sessionId);
-        player.weapon = data.weapon;
     }
 }
 
@@ -105,41 +55,6 @@ export class StateHandlerRoom extends Room<State> {
 
         this.onMessage("move", (client, data) => {
             this.state.movePlayer(client.sessionId, data);
-        });
-
-        this.onMessage("weapon", (client, data) => {
-            this.state.changeWeaponPlayer(client.sessionId, data);
-        });
-
-        this.onMessage("shoot", (client, data) => {
-            this.broadcast("Shoot", data, {except: client});
-        });
-
-        this.onMessage("damage", (client, data) => {
-            const id = data.id;
-            const player = this.state.players.get(id);
-            let hp = player.currentHealth - data.value;
-
-            if (hp > 0) {
-                player.currentHealth = hp;
-                return;
-            }
-
-            const rndIndex = Math.floor(Math.random() * SPAWN_POINTS.length);
-            const spawnPosition = SPAWN_POINTS[rndIndex];
-            const x = spawnPosition.x;
-            const z = spawnPosition.z;
-
-            player.loss++;
-            player.currentHealth = player.health;
-
-            for(const client of this.clients){
-                if (client.id !== id)
-                    continue;
-
-                const message = JSON.stringify({x, z, id});
-                client.send("Restart", message);
-            }
         });
     }
 
