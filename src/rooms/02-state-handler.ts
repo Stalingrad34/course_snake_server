@@ -11,21 +11,26 @@ const SPAWN_POINTS: Vector2[] = [{x:10, z:10}, {x:-10, z:10}, {x:10, z:-10}, {x:
 export class Player extends Schema {
     @type("number") speed = 0;
     @type("uint16") p = 0;
+    @type("uint16") c = 0;
     @type("number") pX = 0;
     @type("number") pZ = 0;
-    @type("number") rY = 0;
 }
 
 export class State extends Schema {
     @type({ map: Player })
     players = new MapSchema<Player>();
-
-    something = "This attribute won't be sent to the client-side";
+    colorsLength: number;
+    spawnPointsLength: number;
+    colors: number[] = [];
 
     createPlayer(sessionId: string, data: any) {
+        const colorIdx = this.getPlayerColor();
+        this.colors.push(colorIdx);
+
         const player = new Player();
         player.speed = data.speed;
         player.p = data.parts;
+        player.c = colorIdx;
 
         const spawnPosition = SPAWN_POINTS[this.players.size]
         player.pX = spawnPosition.x;
@@ -35,6 +40,7 @@ export class State extends Schema {
     }
 
     removePlayer(sessionId: string) {
+        this.colors = this.colors.filter(color => color !== this.players.get(sessionId).c);
         this.players.delete(sessionId);
     }
 
@@ -43,15 +49,24 @@ export class State extends Schema {
         player.pX = data.pX;
         player.pZ = data.pZ;
     }
+
+    getPlayerColor(): number {
+        for (let i = 0; i < this.colorsLength; i++) {
+            if (!this.colors.includes(i)) {
+                return i;
+            }
+        }   
+        
+        return 0;
+    }
 }
 
 export class StateHandlerRoom extends Room<State> {
-    maxClients = 8;
+    maxClients = 4;
 
     onCreate (options) {
-        console.log("StateHandlerRoom created!", options);
-
         this.setState(new State());
+        this.state.colorsLength = options.colorsLength;
 
         this.onMessage("move", (client, data) => {
             this.state.movePlayer(client.sessionId, data);
@@ -63,7 +78,6 @@ export class StateHandlerRoom extends Room<State> {
     }
 
     onJoin (client: Client, data: any) {
-        client.send("hello", "world");
         this.state.createPlayer(client.sessionId, data);
     }
 
