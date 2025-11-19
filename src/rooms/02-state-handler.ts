@@ -4,6 +4,12 @@ import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 export class Vector2Float extends Schema {
     @type("number") x: number;
     @type("number") z: number;
+
+    constructor(x: number, z: number) {
+        super();
+        this.x = x;
+        this.z = z;
+    }
 }
 
 export class Apple extends Schema {
@@ -12,10 +18,11 @@ export class Apple extends Schema {
 }
 
 export class Player extends Schema {
+    @type("string") nickname = "";
     @type("number") speed = 0;
-    @type("uint16") p = 0; //parts
-    @type("uint16") s = 0; //score
-    @type("uint16") c = 0; //color
+    @type("uint16") parts = 0;
+    @type("uint16") score = 0;
+    @type("uint16") color = 0;
     @type("number") pX = 0;
     @type("number") pZ = 0;
 }
@@ -29,11 +36,12 @@ export class State extends Schema {
     colors: number[] = [];
     fieldSize = 40;
     appleId = 0;
+    gameOverIds: string[] = [];
 
-    createApple() {
+    createApple(postion: Vector2Float) {
         const appleData = new Apple();
         appleData.id = ++this.appleId;
-        appleData.position = this.getRandomFieldPoint();
+        appleData.position = postion;
         this.applesData.push(appleData);
     }
 
@@ -43,8 +51,8 @@ export class State extends Schema {
             return;
 
         apple.position = this.getRandomFieldPoint();
-        player.s++;
-        player.p = Math.round(player.s / 3);
+        player.score++;
+        player.parts = Math.round(player.score / 3);
     }
 
     createPlayer(sessionId: string, data: any) {
@@ -52,20 +60,23 @@ export class State extends Schema {
         this.colors.push(colorIdx);
 
         const player = new Player();
+        player.nickname = data.nickname;
         player.speed = data.speed;
-        player.p = data.parts;
-        player.c = colorIdx;
+        player.parts = data.parts;
+        player.color = colorIdx;
 
         const randomPoint = this.getRandomFieldPoint();
         player.pX = randomPoint.x;
         player.pZ = randomPoint.z;
 
         this.players.set(sessionId, player);
+        this.gameOverIds = this.gameOverIds.filter(id => id !== sessionId);
     }
 
     removePlayer(sessionId: string) {
-        this.colors = this.colors.filter(color => color !== this.players.get(sessionId).c);
-        this.players.delete(sessionId);
+        if (this.players.has(sessionId)) {
+            this.players.delete(sessionId);
+        }
     }
 
     movePlayer (sessionId: string, data: any) {
@@ -74,22 +85,34 @@ export class State extends Schema {
         player.pZ = data.pZ;
     }
 
+    gameOver(data) {
+        const gameOverData = JSON.parse(data);
+        const clientId = gameOverData.id;
+
+        const gameOverId = this.gameOverIds.find(id => id === clientId);
+        if (gameOverId !== undefined) {
+            return;
+        }
+
+        this.gameOverIds.push(clientId)
+
+        this.removePlayer(clientId);
+
+        for (let i = 0; i < gameOverData.parts.length; i++) {
+            const position = gameOverData.parts[i];
+            this.createApple(position);
+        }
+    }
+
     getPlayerColor(): number {
-        for (let i = 0; i < this.colorsLength; i++) {
-            if (!this.colors.includes(i)) {
-                return i;
-            }
-        }   
-        
-        return 0;
+        return Math.floor(Math.random() * this.colorsLength) + 1;
     }
 
     getRandomFieldPoint(): Vector2Float {
-        const point = new Vector2Float();
-        point.x = Math.floor(Math.random() * this.fieldSize) - this.fieldSize / 2;
-        point.z = Math.floor(Math.random() * this.fieldSize) - this.fieldSize / 2;
+        const x = Math.floor(Math.random() * this.fieldSize) - this.fieldSize / 2;
+        const z = Math.floor(Math.random() * this.fieldSize) - this.fieldSize / 2;
 
-        return point;
+        return new Vector2Float(x, z);
     }
 }
 
@@ -110,8 +133,12 @@ export class StateHandlerRoom extends Room<State> {
             this.state.collectApple(player, data);
         });
 
+        this.onMessage("gameOver", (client, data) => {
+            this.state.gameOver(data);
+        });
+
         for (let i = 0; i < this.startAppleCount; i++) {
-            this.state.createApple();
+            this.state.createApple(this.state.getRandomFieldPoint());
         }
     }
 
